@@ -2,26 +2,32 @@
 ### - the 'ci_settings.xml' is used by maven commands (instead of using default one, '~/.m2/settings.xml').
 ### - this file recover the token provided during GitLab CI/CD in order to use it for 'GitLab Maven repository' authentication
 ### - the GitLab runner configuration added '/root/.m2' folder in cache in order to avoid to download all maven dependencies for each pipeline and each job.
+### - this example use two runner, one called 'docker' and an other one called 'shell'
 
+## ----------------------------------------------------------------------------
 # variables
 variables:
   # maven env.
   MAVEN_CLI_OPTS: "--batch-mode -Dmaven.repo.local=/root/.m2/repository -s ci_settings.xml " # <= set 'ci_settings.xml' file
 
+## ----------------------------------------------------------------------------
 # cache 
 cache:
   key: ${CI_COMMIT_REF_SLUG}
   paths:
     - target/ # <= add this path to keep generated jar / code report / javadoc betweens jobs of ≠ stages
 
+## ----------------------------------------------------------------------------
 # stages
 stages:
   - build
   - tests
-  - deploy
-  - reports
+  - publish
 
-# jobs
+## ----------------------------------------------------------------------------
+# List of jobs
+
+# Info: this job only compile the java project
 build:
   stage: build
   tags:
@@ -34,6 +40,7 @@ build:
     # note: unit tests are not run during this job.
     - mvn $MAVEN_CLI_OPTS -Dmaven.test.skip=true clean package
 
+# Info: this job only run unit tests
 tests:
   stage: tests
   tags:
@@ -47,16 +54,32 @@ tests:
     # note: this job only run maven test
     - mvn $MAVEN_CLI_OPTS  test
   after_script:
-    #
+    - echo "[gitlab-ci] analyze your code thanks Sonarqube";
+    # for this command you must specify CI/CD variables 'SONAR_HOST_URL' and 'SONAR_TOKEN' in your GitLab project / (or parent group).
     - mvn $MAVEN_CLI_OPTS sonar:sonar -Dsonar.host.url=$SONAR_HOST_URL -Dsonar.projectKey=$CI_PROJECT_NAME -Dsonar.login=$SONAR_TOKEN
     - echo "[gitlab-ci] print jacoco code coverage in console";
+    # for this command, configure jacoco code coverage in your 'pom.xml' file; you can see and example in this file's folder.
     - cat target/site/jacoco/jacoco.csv | awk -F"," '{ instructions += $4 + $5; covered += $5 } END { print covered, "/", instructions, "instructions covered"; print 100*covered/instructions, "% covered" }'
     - echo "[gitlab-ci] generate javadoc";
+    # for this command, configure javadoc generation in your 'pom.xml' file; you can see and example in this file's folder.
     - mvn $MAVEN_CLI_OPTS javadoc:javadoc
+  # this command is used by gitlab to catch the project's code coverage
   coverage: '/(\d+\.?\d+) % covered/'
 
-code report:
-  stage: reports
+# Info: this job copy generated javadoc and jacoco code coverage report to a dev. server (into specific folders, in '/var/www/html/' directory).
+#
+# You must configure the targeted directory to be writable for a linux user (e.g.: create one called 'gitlab-bot')
+# and add/configure a RSA public key to allow SSH commands without login/password authentication
+# (You should consider to allow this user to perform SSH commands only from your GitLab Runner server IP).
+#
+# For this job, you need to set the following CI/CD variables in your GitLab project / (or parent group):
+# - SSH_USER: your linux user on the remote server
+# - SSH_OPTS: SSH command options; e.g.: " -q -t "
+# - SSH_HOST_DEV_SERVER: the targeted server DNS or IP
+# - SSH_PRIVATE_KEY: the linux user private RSA key (must be kept secret! hide this variable)
+#
+publish code report:
+  stage: publish
   tags:
     - docker
   image: "pfem/ssh-utils"
@@ -71,14 +94,16 @@ code report:
     - ssh-add <(echo "$SSH_PRIVATE_KEY" | base64 -d)
   script:
     - echo "[gitlab-ci] remove old code report on test server";
-    - ssh $SSH_OPTS $SSH_USER@$SSH_HOST_PFEMLINDEV "rm -rf /var/www/html/code_report_$CI_PROJECT_NAMESPACE/$CI_PROJECT_NAME "
-    - ssh $SSH_OPTS $SSH_USER@$SSH_HOST_PFEMLINDEV "rm -rf /var/www/html/javadoc_$CI_PROJECT_NAMESPACE/$CI_PROJECT_NAME "
+    - ssh $SSH_OPTS $SSH_USER@$SSH_HOST_DEV_SERVER "rm -rf /var/www/html/code_report_$CI_PROJECT_NAMESPACE/$CI_PROJECT_NAME "
+    - ssh $SSH_OPTS $SSH_USER@$SSH_HOST_DEV_SERVER "rm -rf /var/www/html/javadoc_$CI_PROJECT_NAMESPACE/$CI_PROJECT_NAME "
     - echo "[gitlab-ci] copy code report and javadoc to test server";
-    - scp -r target/site/jacoco $SSH_USER@$SSH_HOST_PFEMLINDEV:/var/www/html/code_report_$CI_PROJECT_NAMESPACE/$CI_PROJECT_NAME
-    - scp -r target/site/apidocs $SSH_USER@$SSH_HOST_PFEMLINDEV:/var/www/html/javadoc_$CI_PROJECT_NAMESPACE/$CI_PROJECT_NAME
+    - scp -r target/site/jacoco $SSH_USER@$SSH_HOST_DEV_SERVER:/var/www/html/code_report_$CI_PROJECT_NAMESPACE/$CI_PROJECT_NAME
+    - scp -r target/site/apidocs $SSH_USER@$SSH_HOST_DEV_SERVER:/var/www/html/javadoc_$CI_PROJECT_NAMESPACE/$CI_PROJECT_NAME
 
-deploy:
-  stage: deploy
+# Info: this job deploy generated jar/war to GitLab maven repository.
+# You must enable this option in your project's 'settings' section.
+publish lib in GitLab mvn repo:
+  stage: publish
   tags:
     - docker
   image: maven:3.6-jdk-11
@@ -87,4 +112,3 @@ deploy:
       - tags
   script:
     - mvn $MAVEN_CLI_OPTS -Dmaven.test.skip=true deploy
-

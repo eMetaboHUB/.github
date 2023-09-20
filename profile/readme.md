@@ -1,7 +1,21 @@
 # Welcome to our public repository for metabolomics & fluxomics tools by MetaboHUB
 
+![logo mth](./images/logo_mth.jpeg.jpg  "logo mth")
+
 Please find all our public codes, projects and best practices from the MetaboHUB national infrastructure.
+
+## Public code repositories
+
+
+- [Discovery](https://github.com/eMetaboHUB/Discovery) - eases sparql request
+- [Forum - DiseasesChem](https://github.com/eMetaboHUB/Forum-DiseasesChem) - a Knowledge Graph from public databases and scientific literature to extract associations between chemicals and diseases.
+- [Metasaurus](https://github.com/eMetaboHUB/metasaurus) - ontology for metabolomics studies and objects
+- [PeakForest](https://github.com/peakforest) - The MetaboHUB's spectral database
 
 ## Documentation and best practices
 
 - [CI/CD Best practices and recommendations](ci_cd_best_practices/README.md)
+
+<!-- TODO add other doc. here -->
+
+![banner mth](./images/logo_banner.png  "banner mth")
