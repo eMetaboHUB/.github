@@ -1,123 +1,384 @@
+<?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0"
 	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
 	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
-	<!-- default / classic metadata -->
+	<!-- maven meta -->
 	<modelVersion>4.0.0</modelVersion>
-	<groupId>fr.metabohub</groupId>
-	<artifactId>my-java-lib</artifactId>
-	<version>1.42.66-SNAPSHOT</version>
-	<name>My Java Lib</name>
+	<!-- project meta -->
+	<groupId>fr.mycompagny.xxx</groupId>
+	<artifactId>my_app-boot</artifactId>
+	<version>1.1.2-SNAPSHOT</version>
+	<name>MyApp - Boot</name>
+	<packaging>war</packaging>
+	<!-- legacy -->
+	<parent>
+		<groupId>org.springframework.boot</groupId>
+		<artifactId>spring-boot-starter-parent</artifactId>
+		<version>2.2.2.RELEASE</version>
+		<relativePath />
+	</parent>
+	<!-- get PFEM and SupRed java libs -->
+	<repositories>
+		<repository>
+			<id>gitlab-maven-xxx</id>
+			<url>${CI_API_V4_URL}/groups/XX/-/packages/maven</url>
+		</repository>
+		<repository>
+			<id>gitlab-maven-my_app</id>
+			<url>${CI_API_V4_URL}/groups/YY/-/packages/maven</url>
+		</repository>
+	</repositories>
+	<!-- project properties -->
 	<properties>
 		<!-- project conf -->
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-		<project.build.java.version>11</project.build.java.version>
-		<!-- build and tests -->
+		<project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+		<java.version>11</java.version>
+		<!-- spring boot properties -->
+		<start-class>fr.mycompagny.xxx.my_app.boot.app.SpringBootWebApplication</start-class>
+		<!-- building -->
+		<timestamp>${maven.build.timestamp}</timestamp>
+		<maven.build.timestamp.format>yyyy-MM-dd HH:mm</maven.build.timestamp.format>
+		<!-- other MyApp lib. version -->
+		<my_app.version>1.1.2-SNAPSHOT</my_app.version>
+		<!-- generic tools -->
+		<!-- openapi3 code specification -->
+		<swagger-annotations-version>1.6.2</swagger-annotations-version>
+		<jersey-version>2.27</jersey-version>
+		<jackson-version>2.10.2</jackson-version>
+		<jodatime-version>2.7</jodatime-version>
+		<maven-plugin-version>1.0.0</maven-plugin-version>
+		<springfox-version>3.0.0</springfox-version>
+		<threetenbp-version>1.3.8</threetenbp-version>
+		<datatype-threetenbp-version>2.6.4</datatype-threetenbp-version>
+		<spring-boot-starter-web-version>2.1.0.RELEASE</spring-boot-starter-web-version>
+		<junit-version>4.12</junit-version>
+		<migbase64-version>2.2</migbase64-version>
+		<jackson-databind-nullable>0.2.1</jackson-databind-nullable>
+		<!-- build -->
 		<argLine>-Xmx4096m -XX:MaxPermSize=512M</argLine>
-		<!-- other props -->
+		<!-- tests -->
+		<sonar.coverage.exclusions>**/ServletInitializer.java,**/SpringBootWebApplication.java,,**/CustomAuthenticationProvider.java</sonar.coverage.exclusions>
+		<mockito.version>3.9.0</mockito.version>
 	</properties>
-	<repositories>
-		<!-- get in-house java libs from same GitLab group. If they are in an other GitLab group, use the group ID instead of using pre-defined GitLab CI variable -->
-		<repository>
-		<id>gitlab-maven-xxx</id>
-			<url>${CI_API_V4_URL}/groups/${CI_PROJECT_ROOT_NAMESPACE}/-/packages/maven</url>
-		</repository>
-	</repositories>
-	<!-- publish project on gitlab-maven-xxx -->
-	<distributionManagement>
-		<repository>
-			<id>gitlab-maven-xxx</id>
-			<url>${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/maven</url>
-		</repository>
-		<snapshotRepository>
-			<id>gitlab-maven-xxx</id>
-			<url>${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/maven</url>
-		</snapshotRepository>
-	</distributionManagement>
+	<scm>
+		<connection>scm:git:git://git@my-gitlab-server:my_app/my_app-boot.git</connection>
+	</scm>
+	<!-- project dependencies -->
 	<dependencies>
-		<!-- add all project maven dependencies here -->
+		<!-- I - Spring-Boot dep. -->
+		<!-- This is a web application -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-web</artifactId>
+			<exclusions>
+				<exclusion>
+					<groupId>org.jboss.logging</groupId>
+					<artifactId>jboss-logging</artifactId>
+				</exclusion>
+				<exclusion>
+					<groupId>org.springframework.boot</groupId>
+					<artifactId>spring-boot-starter-logging</artifactId>
+				</exclusion>
+			</exclusions>
+		</dependency>
+		<!-- Tomcat embedded container -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-tomcat</artifactId>
+			<scope>provided</scope>
+		</dependency>
+		<!-- JSTL for JSP -->
+		<dependency>
+			<groupId>javax.servlet</groupId>
+			<artifactId>jstl</artifactId>
+		</dependency>
+		<!-- Need this to compile JSP -->
+		<dependency>
+			<groupId>org.apache.tomcat.embed</groupId>
+			<artifactId>tomcat-embed-jasper</artifactId>
+			<scope>provided</scope>
+		</dependency>
+		<!-- Need this to compile JSP, tomcat-embed-jasper version is not working,
+			no idea why -->
+		<dependency>
+			<groupId>org.eclipse.jdt.core.compiler</groupId>
+			<artifactId>ecj</artifactId>
+			<version>4.6.1</version>
+			<scope>provided</scope>
+		</dependency>
+		<!-- II - in-house API(s) / resources -->
+		<!-- MyApp - Projects Manager - API (include PFEM lib like toolbox, database-connector,
+			lims, ...) -->
+		<dependency>
+			<groupId>fr.mycompagny.xxx</groupId>
+			<artifactId>my_app-projects-manager-api</artifactId>
+			<version>${my_app.version}</version>
+		</dependency>
+		<!-- MyApp - Design (CSS+JS) -->
+		<dependency>
+			<groupId>fr.mycompagny.xxx</groupId>
+			<artifactId>my_app-design</artifactId>
+			<version>${my_app.version}</version>
+		</dependency>
+		<!-- MyApp - Resources (XLSX template, my_app_rest_api.yaml file, ...) -->
+		<dependency>
+			<groupId>fr.mycompagny.xxx</groupId>
+			<artifactId>my_app-resources</artifactId>
+			<version>${my_app.version}</version>
+		</dependency>
+		<!-- III - web-outputs -->
+		<!-- jsp stuff -->
+		<dependency>
+			<groupId>org.glassfish.web</groupId>
+			<artifactId>el-impl</artifactId>
+			<version>2.2</version>
+		</dependency>
+		<!-- IV - security -->
+		<!-- https://mvnrepository.com/artifact/org.springframework.security/spring-security-config -->
+		<dependency>
+			<groupId>org.springframework.security</groupId>
+			<artifactId>spring-security-config</artifactId>
+		</dependency>
+		<!-- https://mvnrepository.com/artifact/org.springframework.security/spring-security-web -->
+		<dependency>
+			<groupId>org.springframework.security</groupId>
+			<artifactId>spring-security-web</artifactId>
+		</dependency>
+		<!-- avoid XSS -->
+		<dependency>
+			<groupId>org.jsoup</groupId>
+			<artifactId>jsoup</artifactId>
+			<version>1.7.2</version>
+		</dependency>
+		<!-- V - OpenAPI 3 code specification -->
+		<dependency>
+			<groupId>io.swagger</groupId>
+			<artifactId>swagger-annotations</artifactId>
+			<version>${swagger-annotations-version}</version>
+		</dependency>
+		<dependency>
+			<groupId>org.glassfish.jersey.core</groupId>
+			<artifactId>jersey-client</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.glassfish.jersey.media</groupId>
+			<artifactId>jersey-media-multipart</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.glassfish.jersey.media</groupId>
+			<artifactId>jersey-media-json-jackson</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>com.fasterxml.jackson.jaxrs</groupId>
+			<artifactId>jackson-jaxrs-base</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>com.fasterxml.jackson.core</groupId>
+			<artifactId>jackson-core</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>com.fasterxml.jackson.core</groupId>
+			<artifactId>jackson-annotations</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>com.fasterxml.jackson.core</groupId>
+			<artifactId>jackson-databind</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>com.fasterxml.jackson.jaxrs</groupId>
+			<artifactId>jackson-jaxrs-json-provider</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>com.fasterxml.jackson.datatype</groupId>
+			<artifactId>jackson-datatype-joda</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>joda-time</groupId>
+			<artifactId>joda-time</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>com.brsanthu</groupId>
+			<artifactId>migbase64</artifactId>
+			<version>${migbase64-version}</version>
+		</dependency>
+		<dependency>
+			<groupId>io.springfox</groupId>
+			<artifactId>springfox-swagger2</artifactId>
+			<version>${springfox-version}</version>
+		</dependency>
+		<dependency>
+			<groupId>io.springfox</groupId>
+			<artifactId>springfox-swagger-ui</artifactId>
+			<version>${springfox-version}</version>
+		</dependency>
+		<dependency>
+			<groupId>org.threeten</groupId>
+			<artifactId>threetenbp</artifactId>
+			<version>${threetenbp-version}</version>
+		</dependency>
+		<dependency>
+			<groupId>com.github.joschi.jackson</groupId>
+			<artifactId>jackson-datatype-threetenbp</artifactId>
+			<version>${datatype-threetenbp-version}</version>
+		</dependency>
+		<dependency>
+			<groupId>org.openapitools</groupId>
+			<artifactId>jackson-databind-nullable</artifactId>
+			<version>${jackson-databind-nullable}</version>
+		</dependency>
+		<!-- VI - PDF export -->
+		<dependency>
+			<groupId>org.thymeleaf</groupId>
+			<artifactId>thymeleaf</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.xhtmlrenderer</groupId>
+			<artifactId>flying-saucer-pdf</artifactId>
+			<version>9.1.20</version>
+		</dependency>
+		<!-- https://mvnrepository.com/artifact/commons-io/commons-io -->
+		<dependency>
+			<groupId>commons-io</groupId>
+			<artifactId>commons-io</artifactId>
+			<version>2.9.0</version>
+		</dependency>
+		<!-- VII - upload files -->
+		<dependency>
+			<groupId>commons-fileupload</groupId>
+			<artifactId>commons-fileupload</artifactId>
+			<version>1.2.1</version>
+		</dependency>
+		<!-- VIII - Object mapping - https://mvnrepository.com/artifact/net.sf.dozer/dozer -->
+		<dependency>
+			<groupId>net.sf.dozer</groupId>
+			<artifactId>dozer</artifactId>
+			<version>5.5.1</version>
+		</dependency>
+		<!-- ############# JUNIT TEST ############# -->
+		<dependency>
+			<groupId>org.junit.jupiter</groupId>
+			<artifactId>junit-jupiter</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-test</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework</groupId>
+			<artifactId>spring-test</artifactId>
+			<scope>runtime</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.mockito</groupId>
+			<artifactId>mockito-all</artifactId>
+			<version>1.10.19</version>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.mockito</groupId>
+			<artifactId>mockito-inline</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.hamcrest</groupId>
+			<artifactId>hamcrest-core</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>xmlunit</groupId>
+			<artifactId>xmlunit</artifactId>
+			<version>1.6</version>
+			<scope>test</scope>
+		</dependency>
 	</dependencies>
+	<!-- packaging -->
 	<build>
-		<!-- packaging -->
-		<defaultGoal>jar</defaultGoal>
-		<sourceDirectory>${basedir}/src/main/java</sourceDirectory>
+		<finalName>my_app-boot-${project.version}</finalName>
 		<resources>
 			<resource>
-				<directory>${basedir}/src/main/resources</directory>
+				<directory>${project.basedir}/src/main/resources</directory>
+				<filtering>true</filtering>
+				<excludes>
+					<exclude>static/libraries/fontawesome/**</exclude>
+				</excludes>
+			</resource>
+			<resource>
+				<directory>${project.basedir}/src/main/resources</directory>
+				<filtering>false</filtering>
+				<includes>
+					<include>static/libraries/fontawesome/css/**</include>
+					<include>static/libraries/fontawesome/svgs/**</include>
+					<include>static/libraries/fontawesome/webfonts/**</include>
+				</includes>
 			</resource>
 		</resources>
 		<plugins>
-			<!-- java version -->
+			<!-- clean war -->
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
-				<artifactId>maven-compiler-plugin</artifactId>
-				<version>3.8.0</version>
+				<artifactId>maven-resources-plugin</artifactId>
 				<configuration>
-					<release>${project.build.java.version}</release>
+					<nonFilteredFileExtensions>
+						<nonFilteredFileExtension>pdf</nonFilteredFileExtension>
+						<nonFilteredFileExtension>ttf</nonFilteredFileExtension>
+						<nonFilteredFileExtension>woff</nonFilteredFileExtension>
+						<nonFilteredFileExtension>woff2</nonFilteredFileExtension>
+						<nonFilteredFileExtension>eot</nonFilteredFileExtension>
+						<nonFilteredFileExtension>svg</nonFilteredFileExtension>
+						<nonFilteredFileExtension>ico</nonFilteredFileExtension>
+					</nonFilteredFileExtensions>
+					<delimiters>
+						<delimiter>@</delimiter>
+					</delimiters>
+					<useDefaultDelimiters>false</useDefaultDelimiters>
 				</configuration>
 			</plugin>
-			<!-- force UTF-8 / GTM tests -->
+			<plugin>
+				<artifactId>maven-war-plugin</artifactId>
+				<configuration>
+					<packagingExcludes>WEB-INF/lib/*.txt</packagingExcludes>
+				</configuration>
+			</plugin>
+			<!-- Package as an executable jar/war -->
+			<plugin>
+				<groupId>org.springframework.boot</groupId>
+				<artifactId>spring-boot-maven-plugin</artifactId>
+			</plugin>
+			<!-- force UTF-8 tests -->
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-surefire-plugin</artifactId>
-				<version>2.22.2</version>
 				<configuration>
 					<argLine>@{argLine} -Dfile.encoding=UTF-8 -Duser.timezone=GMT</argLine>
 				</configuration>
-			</plugin>
-			<!-- Deploy the jar in the same project -->
-			<plugin>
-				<groupId>org.apache.maven.plugins</groupId>
-				<artifactId>maven-jar-plugin</artifactId>
-				<version>3.2.0</version>
-				<goals>
-					<goal>jar</goal>
-				</goals>
-				<configuration>
-					<outputDirectory>target/</outputDirectory>
-				</configuration>
-			</plugin>
-			<!-- Deploy the jar containing sources in the project -->
-			<plugin>
-				<groupId>org.apache.maven.plugins</groupId>
-				<artifactId>maven-source-plugin</artifactId>
-				<version>3.2.0</version>
-				<executions>
-					<execution>
-						<id>attach-sources</id>
-						<goals>
-							<goal>jar</goal>
-						</goals>
-						<configuration>
-							<outputDirectory>target/</outputDirectory>
-							<attach>true</attach>
-						</configuration>
-					</execution>
-				</executions>
 			</plugin>
 			<!-- javadoc -->
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-javadoc-plugin</artifactId>
-				<version>3.1.1</version>
 				<configuration>
-					<doctitle>My API for ${project.name} ${project.version}</doctitle>
-					<windowtitle>My API for ${project.name} ${project.version}</windowtitle>
-					<testDoctitle>My Test API for ${project.name} ${project.version}</testDoctitle>
-					<testWindowtitle>My Test API for ${project.name} ${project.version}</testWindowtitle>
-					<!-- no fail if warning / errors -->
-					<failOnWarnings>false</failOnWarnings>
-					<failOnError>false</failOnError>
+					<doctitle>My API for ${project.name} ${project.version}</doctitle> <!-- Used by javadoc:javadoc goal -->
+					<windowtitle>My API for ${project.name} ${project.version}</windowtitle> <!-- Used by javadoc:javadoc goal -->
+					<testDoctitle>My Test API for ${project.name} ${project.version}</testDoctitle> <!-- Used by javadoc:test-javadoc goal -->
+					<testWindowtitle>My Test API for ${project.name} ${project.version}</testWindowtitle> <!-- Used by javadoc:test-javadoc goal -->
+					<failOnWarnings>true</failOnWarnings>
 				</configuration>
 			</plugin>
 			<!-- code coverage -->
 			<plugin>
 				<groupId>org.jacoco</groupId>
 				<artifactId>jacoco-maven-plugin</artifactId>
-				<version>0.8.7</version>
+				<version>0.8.5</version>
 				<configuration>
 					<excludes>
+						<!-- ignore main spring boot code -->
+						<exclude>fr/mycompagny/xxx/my_app/boot/app/**</exclude>
+						<!-- ignore custom auth. code -->
+						<exclude>fr/mycompagny/xxx/my_app/boot/security/services/**</exclude>
 						<!-- ignore openapi generated code -->
-						<exclude>fr/archives_ouvertes/*/**</exclude>
+						<exclude>xxx/my_app/*/**</exclude>
 					</excludes>
 				</configuration>
 				<executions>
@@ -136,6 +397,114 @@
 					</execution>
 				</executions>
 			</plugin>
+			<!-- git infos for build -->
+			<plugin>
+				<groupId>pl.project13.maven</groupId>
+				<artifactId>git-commit-id-plugin</artifactId>
+				<executions>
+					<execution>
+						<phase>validate</phase>
+						<goals>
+							<goal>revision</goal>
+						</goals>
+					</execution>
+				</executions>
+				<configuration>
+					<!-- human-readable part of the version number -->
+					<dateFormat>yyyyMMdd-HHmmss</dateFormat>
+					<dotGitDirectory>${project.basedir}/.git</dotGitDirectory>
+					<!-- somehow necessary. otherwise the variables are not available in
+						the pom -->
+					<generateGitPropertiesFile>false</generateGitPropertiesFile>
+				</configuration>
+			</plugin>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-dependency-plugin</artifactId>
+				<configuration>
+					<artifactItems>
+						<!-- GUI resources (CSS / JS / Fonts / ...) -->
+						<artifactItem>
+							<groupId>${project.groupId}</groupId>
+							<artifactId>my_app-design</artifactId>
+							<version>${project.version}</version>
+							<type>jar</type>
+							<overWrite>true</overWrite>
+							<outputDirectory>src/main/resources/static.ko</outputDirectory>
+							<excludes>org/**,META-INF/**,infos.txt</excludes>
+						</artifactItem>
+						<!-- Templates resources (XLS files, ...) -->
+						<artifactItem>
+							<groupId>${project.groupId}</groupId>
+							<artifactId>my_app-resources</artifactId>
+							<version>${project.version}</version>
+							<type>jar</type>
+							<overWrite>true</overWrite>
+							<outputDirectory>src/test/resources/</outputDirectory>
+							<excludes>org/**,META-INF/**,infos.txt</excludes>
+						</artifactItem>
+					</artifactItems>
+				</configuration>
+			</plugin>
+			<!-- generate open-api rest code specifications -->
+			<plugin>
+				<groupId>org.openapitools</groupId>
+				<artifactId>openapi-generator-maven-plugin</artifactId>
+				<version>4.2.3</version>
+				<executions>
+					<execution>
+						<goals>
+							<goal>generate</goal>
+						</goals>
+						<configuration>
+							<inputSpec>${project.basedir}/src/main/resources/my_app_rest_api.yaml</inputSpec>
+							<generatorName>spring</generatorName>
+							<apiPackage>xxx.my_app.api</apiPackage>
+							<modelPackage>xxx.my_app.model</modelPackage>
+							<supportingFilesToGenerate>ApiUtil.java</supportingFilesToGenerate>
+							<configOptions>
+								<delegatePattern>true</delegatePattern>
+							</configOptions>
+						</configuration>
+					</execution>
+				</executions>
+			</plugin>
 		</plugins>
+		<pluginManagement>
+			<plugins>
+				<!--This plugin's configuration is used to store Eclipse m2e settings
+					only. It has no influence on the Maven build itself. -->
+				<plugin>
+					<groupId>org.eclipse.m2e</groupId>
+					<artifactId>lifecycle-mapping</artifactId>
+					<version>1.0.0</version>
+					<configuration>
+						<lifecycleMappingMetadata>
+							<pluginExecutions>
+								<pluginExecution>
+									<pluginExecutionFilter>
+										<groupId>
+											org.codehaus.mojo
+										</groupId>
+										<artifactId>
+											exec-maven-plugin
+										</artifactId>
+										<versionRange>
+											[1.6.0,)
+										</versionRange>
+										<goals>
+											<goal>exec</goal>
+										</goals>
+									</pluginExecutionFilter>
+									<action>
+										<ignore></ignore>
+									</action>
+								</pluginExecution>
+							</pluginExecutions>
+						</lifecycleMappingMetadata>
+					</configuration>
+				</plugin>
+			</plugins>
+		</pluginManagement>
 	</build>
 </project>
