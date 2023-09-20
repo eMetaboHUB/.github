@@ -24,7 +24,7 @@
 			<url>${CI_API_V4_URL}/groups/XX/-/packages/maven</url>
 		</repository>
 		<repository>
-			<id>gitlab-maven-my_app</id>
+			<id>gitlab-maven-yyy</id>
 			<url>${CI_API_V4_URL}/groups/YY/-/packages/maven</url>
 		</repository>
 	</repositories>
