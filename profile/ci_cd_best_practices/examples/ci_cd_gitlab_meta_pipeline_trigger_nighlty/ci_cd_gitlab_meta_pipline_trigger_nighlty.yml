@@ -1,0 +1,186 @@
+### NOTES:
+### - you need to set 'API_TOKEN' GitLab CI/CD variable with a token; this token must have the correct API authorization to trigger pipelines
+### - you must mannualy set a specific value for 'gitlab-project-specific-tirigger-token' and 'id_spec_project' ≠ for each job.
+### - this example use two runner, one called 'docker' and an other one called 'shell'
+
+## ----------------------------------------------------------------------------
+# variables
+variables:
+  TRIGGER_IMAGE: registry.gitlab.com/finestructure/pipeline-trigger
+  HOST: you-gitlab-instance-host
+  URL_PATH: /api/v4/projects
+  REF_NAME: "dev" # you can change the ref. branch name here
+  
+# stages
+stages:
+    - test_runners
+    - .clean
+    - my_project_resources
+    - my_project_api_design
+    - my_project_boot
+    - my_project_deploy_boot
+    - .clean
+
+## ----------------------------------------------------------------------------
+# first (quite optional) job: test runners
+test-bash:
+  stage: test_runners
+  tags:
+   - shell
+  except:
+    refs:
+      - master
+      - tags
+  script:
+    - echo "[test] bash runner is OK";
+
+test-docker:
+  stage: test_runners
+  image: ubuntu
+  tags:
+   - docker
+  except:
+    refs:
+      - master
+      - tags
+  script:
+    - echo "[test] docker runner is OK";
+
+## ----------------------------------------------------------------------------
+## base APIs
+
+MyProject - Resources:
+  image: $TRIGGER_IMAGE
+  stage: my_project_resources
+  tags:
+   - docker
+  except:
+    refs:
+      - master
+      - tags
+  script:
+    - trigger -h $HOST -u $URL_PATH -a $API_TOKEN -p "gitlab-project-specific-tirigger-token" -t $REF_NAME id_spec_project
+
+## ----------------------------------------------------------------------------
+## APIs
+
+MyProject - Projects manager - API:
+  image: $TRIGGER_IMAGE
+  stage: my_project_api_design
+  tags:
+   - docker
+  except:
+    refs:
+      - master
+      - tags
+  script:
+    - trigger -h $HOST -u $URL_PATH -a $API_TOKEN -p "gitlab-project-specific-tirigger-token" -t $REF_NAME id_spec_project
+    
+MyProject - Design:
+  image: $TRIGGER_IMAGE
+  stage: my_project_api_design
+  tags:
+   - docker
+  except:
+    refs:
+      - master
+      - tags
+  script:
+    - trigger -h $HOST -u $URL_PATH -a $API_TOKEN -p "gitlab-project-specific-tirigger-token" -t $REF_NAME id_spec_project
+
+## ----------------------------------------------------------------------------
+## WepApp
+
+MyProject - Boot:
+  image: $TRIGGER_IMAGE
+  stage: my_project_boot
+  tags:
+   - docker
+  except:
+    refs:
+      - master
+      - tags
+  script:
+    - trigger -h $HOST -u $URL_PATH -a $API_TOKEN -p "gitlab-project-specific-tirigger-token" -t $REF_NAME id_spec_project
+
+## ----------------------------------------------------------------------------
+## deploy
+
+# Info: this job call a project CI/CD pipeline that:
+# - fetch MyProject - Boot' generated artifact
+# - unzip them
+# - change the config. files for the dev. server
+# - create a docker image with the correct archive / config.
+# - copy this docker image to the dev. server
+# - stop old docker container; restart a new one with the new docker image
+MyProject - Deploy Instances:
+  image: $TRIGGER_IMAGE
+  stage: my_project_deploy_boot
+  tags:
+   - docker
+  except:
+    refs:
+      - master
+      - tags
+  script:
+    - trigger -h $HOST -u $URL_PATH -a $API_TOKEN -p "gitlab-project-specific-tirigger-token" -t $REF_NAME id_spec_project
+
+## ----------------------------------------------------------------------------
+## CLEAN
+
+# Info: this job cleanup usless docker images layer to free disk space (on your GitLab runner server).
+clean gitlab:
+  tags:
+   - shell
+  stage: .clean
+  except:
+    refs:
+      - master
+      - tags
+  script:
+    - echo "[WARNING] clean stopped Docker containers on gitlab server";
+    - echo "[info] sleep 30 seconds ";
+    - sleep 30;
+    - echo "[info] check free space before clean on gitlab server ⇒ run 'df -h' ";
+    - df -h
+    - echo "[info] run 'docker clean' on gitlab server";
+    - docker image prune -f
+    - echo "[info] check free space after clean on gitlab server ⇒ run 'df -h' ";
+    - df -h
+
+# Info: this job cleanup usless docker images layer to free disk space (on your dev. server).
+#
+# You must configure the targeted directory to be writable for a linux user (e.g.: create one called 'gitlab-bot')
+# and add/configure a RSA public key to allow SSH commands without login/password authentication
+# (You should consider to allow this user to perform SSH commands only from your GitLab Runner server IP).
+#
+# For this job, you need to set the following CI/CD variables in your GitLab project / (or parent group):
+# - SSH_USER: your linux user on the remote server
+# - SSH_OPTS: SSH command options; e.g.: " -q -t "
+# - SSH_HOST_DEV_SERVER: the targeted server DNS or IP
+# - SSH_PRIVATE_KEY: the linux user private RSA key (must be kept secret! hide this variable)
+#
+clean dev:
+  tags:
+   - docker
+  image: "pfem/ssh-utils"
+  stage: .clean
+  except:
+    refs:
+      - master
+      - tags
+  before_script:
+    - mkdir -p ~/.ssh
+    - eval $(ssh-agent -s)
+    - '[[ -f /.dockerenv ]] && echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config'
+    - ssh-add <(echo "$SSH_PRIVATE_KEY" | base64 -d)
+  script:
+    - echo "[WARNING] clean stopped Docker containers and Docker tmp files on dev server ($SSH_HOST_DEV_SERVER)";
+    - echo "[info] check free space after clean on dev server ⇒ run 'df -h' ";
+    - ssh $SSH_OPTS $SSH_USER@$SSH_HOST_DEV_SERVER "df -h";
+    - echo "[info] remove tmp docker image files ";
+    - ssh $SSH_OPTS $SSH_USER@$SSH_HOST_DEV_SERVER "rm -rf /tmp/my_app-*.image ";
+    - echo "[info] run 'docker clean' on dev server";
+    - ssh $SSH_OPTS $SSH_USER@$SSH_HOST_DEV_SERVER "docker image prune -f";
+    - echo "[info] check free space after clean on dev server ⇒ run 'df -h' ";
+    - ssh $SSH_OPTS $SSH_USER@$SSH_HOST_DEV_SERVER "df -h";

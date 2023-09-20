@@ -1,0 +1,141 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<!-- default / classic metadata -->
+	<modelVersion>4.0.0</modelVersion>
+	<groupId>fr.metabohub</groupId>
+	<artifactId>my-java-lib</artifactId>
+	<version>1.42.66-SNAPSHOT</version>
+	<name>My Java Lib</name>
+	<properties>
+		<!-- project conf -->
+		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+		<project.build.java.version>11</project.build.java.version>
+		<!-- build and tests -->
+		<argLine>-Xmx4096m -XX:MaxPermSize=512M</argLine>
+		<!-- other props -->
+	</properties>
+	<repositories>
+		<!-- get in-house java libs from same GitLab group. If they are in an other GitLab group, use the group ID instead of using pre-defined GitLab CI variable -->
+		<repository>
+		<id>gitlab-maven-xxx</id>
+			<url>${CI_API_V4_URL}/groups/${CI_PROJECT_ROOT_NAMESPACE}/-/packages/maven</url>
+		</repository>
+	</repositories>
+	<!-- publish project on gitlab-maven-xxx -->
+	<distributionManagement>
+		<repository>
+			<id>gitlab-maven-xxx</id>
+			<url>${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/maven</url>
+		</repository>
+		<snapshotRepository>
+			<id>gitlab-maven-xxx</id>
+			<url>${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/maven</url>
+		</snapshotRepository>
+	</distributionManagement>
+	<dependencies>
+		<!-- add all project maven dependencies here -->
+	</dependencies>
+	<build>
+		<!-- packaging -->
+		<defaultGoal>jar</defaultGoal>
+		<sourceDirectory>${basedir}/src/main/java</sourceDirectory>
+		<resources>
+			<resource>
+				<directory>${basedir}/src/main/resources</directory>
+			</resource>
+		</resources>
+		<plugins>
+			<!-- java version -->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-compiler-plugin</artifactId>
+				<version>3.8.0</version>
+				<configuration>
+					<release>${project.build.java.version}</release>
+				</configuration>
+			</plugin>
+			<!-- force UTF-8 / GTM tests -->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-surefire-plugin</artifactId>
+				<version>2.22.2</version>
+				<configuration>
+					<argLine>@{argLine} -Dfile.encoding=UTF-8 -Duser.timezone=GMT</argLine>
+				</configuration>
+			</plugin>
+			<!-- Deploy the jar in the same project -->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-jar-plugin</artifactId>
+				<version>3.2.0</version>
+				<goals>
+					<goal>jar</goal>
+				</goals>
+				<configuration>
+					<outputDirectory>target/</outputDirectory>
+				</configuration>
+			</plugin>
+			<!-- Deploy the jar containing sources in the project -->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-source-plugin</artifactId>
+				<version>3.2.0</version>
+				<executions>
+					<execution>
+						<id>attach-sources</id>
+						<goals>
+							<goal>jar</goal>
+						</goals>
+						<configuration>
+							<outputDirectory>target/</outputDirectory>
+							<attach>true</attach>
+						</configuration>
+					</execution>
+				</executions>
+			</plugin>
+			<!-- javadoc -->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-javadoc-plugin</artifactId>
+				<version>3.1.1</version>
+				<configuration>
+					<doctitle>My API for ${project.name} ${project.version}</doctitle>
+					<windowtitle>My API for ${project.name} ${project.version}</windowtitle>
+					<testDoctitle>My Test API for ${project.name} ${project.version}</testDoctitle>
+					<testWindowtitle>My Test API for ${project.name} ${project.version}</testWindowtitle>
+					<!-- no fail if warning / errors -->
+					<failOnWarnings>false</failOnWarnings>
+					<failOnError>false</failOnError>
+				</configuration>
+			</plugin>
+			<!-- code coverage -->
+			<plugin>
+				<groupId>org.jacoco</groupId>
+				<artifactId>jacoco-maven-plugin</artifactId>
+				<version>0.8.7</version>
+				<configuration>
+					<excludes>
+						<!-- ignore openapi generated code -->
+						<exclude>fr/archives_ouvertes/*/**</exclude>
+					</excludes>
+				</configuration>
+				<executions>
+					<execution>
+						<id>pre-unit-test</id>
+						<goals>
+							<goal>prepare-agent</goal>
+						</goals>
+					</execution>
+					<execution>
+						<id>post-unit-test</id>
+						<phase>test</phase>
+						<goals>
+							<goal>report</goal>
+						</goals>
+					</execution>
+				</executions>
+			</plugin>
+		</plugins>
+	</build>
+</project>

@@ -1,0 +1,90 @@
+### NOTES:
+### - this example use two runner, one called 'docker' and an other one called 'shell'
+### - a '.script' directory contains in-house script (used to remove npm package with same ID from your GitLab registery or by 'package.json' command, like "get git info in json file")
+
+# set default docker image
+image: "your-group/perl"
+
+## ----------------------------------------------------------------------------
+variables:
+  GIT_SUBMODULE_STRATEGY : recursive
+  RELEASE_CONF_FILE: .pause
+  DOCKER_IMAGE: "your-group/perl"
+  POD_FILE: "./lib/Metabolomics/Fragment/Annotation.pm"
+  MD_FILE: "README.md"
+
+## ----------------------------------------------------------------------------
+# stages
+stages:
+  - build-docker
+  - module-test
+  - module-dist
+  - release-upload
+
+## ----------------------------------------------------------------------------
+# Jobs
+
+# build docker image
+build_docker:
+  stage: build-docker
+  tags:
+    - shell
+  script:
+    - docker build -t $DOCKER_IMAGE .
+
+# test your perl module
+module_make_test:
+  stage: module-test
+  tags:
+    - docker
+  script:
+    - perl -MPod::Markdown -e 'Pod::Markdown->new->filter(@ARGV)' $POD_FILE > $MD_FILE
+    - perl Makefile.PL
+    - make
+    - cover -test -summary
+    - rm -rf public/*
+    - cp -r cover_db/* public/
+    - make clean
+  coverage: /Total\s+.+\s(\d+\.\d+?)$/ # your code coverage
+  artifacts:
+    paths:
+      - public
+    expire_in: 30 days
+
+# build your perl package
+build_perl_package:
+  stage: module-dist
+  tags:
+    - docker
+  script:
+    - perl Makefile.PL
+    - make
+    - make dist
+    - mkdir artifacts
+    - echo "CI_PROJECT_DIR is $CI_PROJECT_DIR";
+    - cp $CI_PROJECT_DIR/*.tar.gz  $CI_PROJECT_DIR/artifacts/.
+  artifacts:
+    name: Metabolomics-Fragment-Annotation-$CI_COMMIT_SHORT_SHA
+    expire_in: 1 day
+    paths:
+        - $CI_PROJECT_DIR/artifacts
+
+## TODO - releases...
+
+# publish your release on the CPAN; only launched if you added a tag to your Git project!
+# Note: you must set your private GitLab CI/CD variable "MY_PAUSE_PASS" before
+release_cpan:
+  stage: release-upload
+  tags:
+    - docker
+  only:
+    - tags
+  script:
+    - cpan-upload -h
+    - touch ./$RELEASE_CONF_FILE
+    - echo "user MY_NAME" >> ./$RELEASE_CONF_FILE
+    - echo "password MY_PASS" >> ./$RELEASE_CONF_FILE
+    - echo "RELEASE_DEBUG true" >> ./$RELEASE_CONF_FILE
+    - sed -i -e "s|MY_NAME|$MY_PAUSE_NAME|g" -e "s|MY_PASS|$MY_PAUSE_PASS|g" ./$RELEASE_CONF_FILE
+    - cat -n ./$RELEASE_CONF_FILE
+    - cpan-upload -c ./$RELEASE_CONF_FILE --md5 -v ./artifacts/Metabolomics-Fragment-Annotation-$CI_COMMIT_TAG.tar.gz

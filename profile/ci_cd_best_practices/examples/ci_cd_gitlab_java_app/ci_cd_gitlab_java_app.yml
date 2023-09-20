@@ -1,0 +1,264 @@
+### NOTES:
+### - the 'ci_settings.xml' is used by maven commands (instead of using default one, '~/.m2/settings.xml').
+### - this file recover the token provided during GitLab CI/CD in order to use it for 'GitLab Maven repository' authentication
+### - the GitLab runner configuration added '/root/.m2' folder in cache in order to avoid to download all maven dependencies for each pipeline and each job.
+### - this example use two runner, one called 'docker' and an other one called 'shell'
+
+## ----------------------------------------------------------------------------
+# variables
+variables:
+  # maven env.
+  MAVEN_CLI_OPTS: "--batch-mode -Dmaven.repo.local=/root/.m2/repository -s ci_settings.xml " # <= set 'ci_settings.xml' file
+  # database - main (postgres)
+  POSTGRESQL_HOSTNAME: "postgresql-test-server"
+  POSTGRESQL_ROOT_PASSWORD: ""
+  POSTGRES_DB: "my_project_test"
+  POSTGRES_USER: "my_project_test"
+  POSTGRES_PASSWORD: "my_project_test"
+  # database - main (mysql)
+  MYSQL_HOSTNAME: "mysql-test-server"
+  MYSQL_ROOT_PASSWORD: "password"
+  MYSQL_DATABASE: "my_project_test"
+  MYSQL_USER: "my_project_test"
+  MYSQL_PASSWORD: "my_project_test"
+  # other
+  PATH_STATIC: "src/main/resources/static"
+
+## ----------------------------------------------------------------------------
+# cache 
+cache:
+  key: ${CI_COMMIT_REF_SLUG}
+  paths:
+    - target/ # <= add this path to keep generated jar / code report / javadoc betweens jobs of ≠ stages
+    - artifacts/
+    - lib/
+    #- $PATH_STATIC/bower_components/
+    - $PATH_STATIC/css/
+    - $PATH_STATIC/js/
+    - $PATH_STATIC/libraries/
+    - $PATH_STATIC/ico/
+    #- $PATH_STATIC/node_modules/
+    - src/test/resources/*.sh
+    - src/test/resources/*.xlsx
+
+## ----------------------------------------------------------------------------
+# stages
+stages:
+  - build
+  - tests
+  - code_reports
+  - artifacts
+
+## ----------------------------------------------------------------------------
+# List of jobs
+
+# Info: this job only compile the java project
+build:
+  stage: build
+  tags:
+    - docker
+  image: maven:3.6-jdk-11
+  except:
+    refs:
+      - tags
+  before_script:
+    - echo "[gitlab-ci] clean artifacts ";
+    - test -d $CI_PROJECT_DIR/artifacts && rm -rf $CI_PROJECT_DIR/artifacts/*.war
+  script:
+    - echo "[gitlab-ci] maven build ";
+    # notes:
+    # - unit tests are not run during this job.;
+    # - 'dependency:unpack' option is used to unzip specific jar and get their content for this project's resources. See 'pom.xml' file for further informations.
+    # - '-Dmaven.generate-openapi.skip=false' option is used to generate java code thanks OpenAPI. See 'pom.xml' file for further informations.
+    - mvn $MAVEN_CLI_OPTS -Dmaven.test.skip=true clean dependency:unpack -Dmaven.generate-openapi.skip=false generate-resources package
+  after_script:
+    - echo "[gitlab-ci] copy to artifacts ";
+    - test -d $CI_PROJECT_DIR/artifacts   || mkdir $CI_PROJECT_DIR/artifacts/
+    - cp $CI_PROJECT_DIR/src/test/resources/*.xlsx $CI_PROJECT_DIR/artifacts/
+    - cp $CI_PROJECT_DIR/target/*.war              $CI_PROJECT_DIR/artifacts/
+
+## ----------------------------------------------------------------------------
+# test jobs - run in parallel
+
+# Info: this job only run unit tests, using a postgresql database service
+unit tests - postgres:
+  stage: tests
+  tags:
+    - docker
+  image: maven:3.6-jdk-11
+  except:
+    refs:
+      - tags
+      - master
+  services:
+    - name: postgres:latest
+      alias: postgresql-test-server
+  before_script:
+    # this instruction are used to update configuration file to run test with this database configuration
+    - echo "[gitlab-ci] remove logger config. file (avoid test timeout) ";
+    - sed -i '/starter-web<\/artifactId>/{:b;$!N;/<\/exclusions>$/!bb;s/<exclusions>.*<\/exclusions>//g}' pom.xml
+    - echo "[gitlab-ci] update database config. ";
+    - sed -i -e "s/127.0.0.1/$POSTGRESQL_HOSTNAME/g" -e 's/<property name="show_sql">true<\/property>/<property name="show_sql">false<\/property>/g' src/test/resources/hibernateTest.cfg.xml
+    - echo "[gitlab-ci] clean MYSQL config. form hibernate config. file...";
+    - sed -i '/MYSQL -->/{:b;$!N;/POSTGRES -->$/!bb;s/<property.*<\/property>/cleaned for tests/g}' src/test/resources/hibernateTest.cfg.xml
+    - sed -i "s/<\!-- <*\(.*\)> -->/<\1>/" src/test/resources/hibernateTest.cfg.xml
+    - echo "[gitlab-ci] update config. file (passwords,...)";
+    - >
+        sed -i \
+            -e "s/pwd-user1/$AD_PASSWD_USER1/g" \
+            -e "s/pwd-user2/$AD_PASSWD_USER2/g" \
+            src/test/resources/confTest.properties
+  script:
+    - echo "[gitlab-ci] run java unit tests ";
+    # note: this job only run maven test
+    - mvn $MAVEN_CLI_OPTS test >> /tmp/junit-test.log || (tail -50 /tmp/junit-test.log && exit 1)
+  after_script:
+    # note: this javadoc is only used for cache purpose, so that next stage's jobs don't fail
+    - echo "[gitlab-ci] generate javadoc";
+    - mvn $MAVEN_CLI_OPTS javadoc:javadoc >> /tmp/javadoc.log || (tail -20 /tmp/javadoc.log && exit 1)
+
+# Info: this job only run unit tests, using a mysql database service
+unit tests - mysql:
+  stage: tests
+  tags:
+    - docker
+  image: maven:3.6-jdk-11
+  except:
+    refs:
+      - tags
+      - master
+  services:
+    - name: mysql:latest
+      alias: mysql-test-server
+  before_script:
+    # this instruction are used to update configuration file to run test with this database configuration
+    - echo "[gitlab-ci] remove logger config. file (avoid test timeout) ";
+    - sed -i '/starter-web<\/artifactId>/{:b;$!N;/<\/exclusions>$/!bb;s/<exclusions>.*<\/exclusions>//g}' pom.xml
+    - echo "[gitlab-ci] update database config. ";
+    - sed -i -e "s/localhost/$MYSQL_HOSTNAME/g" -e 's/<property name="show_sql">true<\/property>/<property name="show_sql">false<\/property>/g' src/test/resources/hibernateTest.cfg.xml
+    - echo "[gitlab-ci] clean POSTGRES config. form hibernate config. file...";
+    - sed -i '/POSTGRES -->/{:b;$!N;/config -->$/!bb;s/<property.*<\/property>/cleaned for tests/g}' src/test/resources/hibernateTest.cfg.xml
+    - sed -i "s/<\!-- <*\(.*\)> -->/<\1>/" src/test/resources/hibernateTest.cfg.xml
+    - echo "[gitlab-ci] update config. file (passwords,...)";
+    - >
+        sed -i \
+            -e "s/pwd-user1/$AD_PASSWD_USER1/g" \
+            -e "s/pwd-user2/$AD_PASSWD_USER2/g" \
+            src/test/resources/confTest.properties
+  script:
+    - echo "[gitlab-ci] run java unit tests ";
+    - mvn $MAVEN_CLI_OPTS org.jacoco:jacoco-maven-plugin:prepare-agent test jacoco:report >> /tmp/junit-test.log || (tail -50 /tmp/junit-test.log && exit 1)
+  after_script:
+    - echo "[gitlab-ci] generate javadoc";
+    # for this command, configure jacoco code coverage in your 'pom.xml' file; you can see and example in this file's folder.
+    - mvn $MAVEN_CLI_OPTS javadoc:javadoc >> /tmp/javadoc.log || (tail -50 /tmp/javadoc.log && exit 1)
+    - echo "[gitlab-ci] send code for analyzis to Sonar";
+    # for this command you must specify CI/CD variables 'SONAR_HOST_URL' and 'SONAR_TOKEN' in your GitLab project / (or parent group).
+    - mvn $MAVEN_CLI_OPTS sonar:sonar -Dsonar.host.url=$SONAR_HOST_URL -Dsonar.projectKey=$CI_PROJECT_NAME -Dsonar.login=$SONAR_TOKEN
+    - echo "[gitlab-ci] print jacoco code coverage in console";
+    # for this command, configure javadoc generation in your 'pom.xml' file; you can see and example in this file's folder.
+    - cat target/site/jacoco/jacoco.csv | awk -F"," '{ instructions += $4 + $5; covered += $5 } END { print covered, "/", instructions, "instructions covered"; print 100*covered/instructions, "% covered" }'
+  coverage: '/(\d+\.\d+) % covered/' # this command is used by gitlab to catch the project's code coverage
+  artifacts:
+    expire_in: 1 day
+    paths:
+      - target/site/jacoco/jacoco.xml # used by 'cobertura' in next job
+
+## ----------------------------------------------------------------------------
+# code_report jobs - run in parallel
+
+# Info: this job copy generated javadoc and jacoco code coverage report to a dev. server (into specific folders, in '/var/www/html/' directory).
+#
+# You must configure the targeted directory to be writable for a linux user (e.g.: create one called 'gitlab-bot')
+# and add/configure a RSA public key to allow SSH commands without login/password authentication
+# (You should consider to allow this user to perform SSH commands only from your GitLab Runner server IP).
+#
+# For this job, you need to set the following CI/CD variables in your GitLab project / (or parent group):
+# - SSH_USER: your linux user on the remote server
+# - SSH_OPTS: SSH command options; e.g.: " -q -t "
+# - SSH_HOST_DEV_SERVER: the targeted server DNS or IP
+# - SSH_PRIVATE_KEY: the linux user private RSA key (must be kept secret! hide this variable)
+pubish code reports on dev server:
+  stage: code_report
+  needs: ["tests-mysql"]
+  tags:
+    - docker
+  image: "pfem/ssh-utils"
+  except:
+    refs:
+      - tags
+      - master
+  before_script:
+    - mkdir -p ~/.ssh
+    - eval $(ssh-agent -s)
+    - '[[ -f /.dockerenv ]] && echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config'
+    - ssh-add <(echo "$SSH_PRIVATE_KEY" | base64 -d)
+  script:
+    - echo "[gitlab-ci] remove old code report on test server";
+    - ssh $SSH_OPTS $SSH_USER@$SSH_HOST_DEV_SERVER "rm -rf /var/www/html/code_report_$CI_PROJECT_NAMESPACE/$CI_PROJECT_NAME "
+    - ssh $SSH_OPTS $SSH_USER@$SSH_HOST_DEV_SERVER "rm -rf /var/www/html/javadoc_$CI_PROJECT_NAMESPACE/$CI_PROJECT_NAME "
+    - echo "[gitlab-ci] copy code report and javadoc to test server";
+    - scp -r target/site/jacoco $SSH_USER@$SSH_HOST_DEV_SERVER:/var/www/html/code_report_$CI_PROJECT_NAMESPACE/$CI_PROJECT_NAME
+    - scp -r target/site/apidocs $SSH_USER@$SSH_HOST_DEV_SERVER:/var/www/html/javadoc_$CI_PROJECT_NAMESPACE/$CI_PROJECT_NAME
+
+# Info: used by GitLab to process the code coverage
+process tests coverage:
+  stage: code_report
+  needs: ["tests-mysql"]
+  tags:
+    - docker
+  image: registry.gitlab.com/haynes/jacoco2cobertura:1.0.7
+  except:
+    refs:
+      - master
+      - tags
+  script:
+    # convert report from jacoco to cobertura, using relative project path
+    - python /opt/cover2cover.py target/site/jacoco/jacoco.xml $CI_PROJECT_DIR/src/main/java/ > target/site/cobertura.xml
+  artifacts:
+    expire_in: 1 day
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: target/site/cobertura.xml
+
+## ----------------------------------------------------------------------------
+# Artifacts jobs - only one job in run.
+#
+# 'war-tmp' is run for all branches, except for master one (and tags). Artifact are kept 24h
+# 'war-lts' is run only for 'master' branch (and tags). Artifact are kept forever
+
+# build artifact for dev. branches
+war-tmp:
+  stage: artifacts
+  tags:
+    - docker
+  image: maven:3.6-jdk-11
+  except:
+    refs:
+      - master
+      - tags
+  script:
+    - ls artifacts/
+  artifacts:
+    name: supred-boot-$CI_COMMIT_REF_NAME
+    expire_in: 1 day
+    paths:
+        - $CI_PROJECT_DIR/artifacts
+
+# build artifact for stables releases
+war-lts:
+  stage: artifacts
+  tags:
+    - docker
+  image: maven:3.6-jdk-11
+  only:
+    refs:
+      - master
+      - tags
+  script:
+    - ls artifacts/
+  artifacts:
+    name: supred-boot-$CI_COMMIT_REF_NAME
+    paths:
+        - $CI_PROJECT_DIR/artifacts
