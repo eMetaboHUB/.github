@@ -1,6 +1,6 @@
 # Welcome to our public repository for metabolomics & fluxomics tools by MetaboHUB
 
-![logo mth](./images/logo_mth.jpeg.jpg  "logo mth")
+![logo mth](https://github.com/eMetaboHUB/.github/blob/main/profile/images/logo_mth.jpg "logo mth")
 
 Please find all our public codes, projects and best practices from the MetaboHUB national infrastructure.
 
@@ -14,8 +14,8 @@ Please find all our public codes, projects and best practices from the MetaboHUB
 
 ## Documentation and best practices
 
-- [CI/CD Best practices and recommendations](ci_cd_best_practices/README.md)
+- [CI/CD Best practices and recommendations](https://github.com/eMetaboHUB/.github/blob/main/profile/ci_cd_best_practices/README.md)
 
 <!-- TODO add other doc. here -->
 
-![banner mth](./images/logo_banner.png  "banner mth")
+![banner mth](https://github.com/eMetaboHUB/.github/blob/main/profile/images/logo_banner.png  "banner mth")
