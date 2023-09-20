@@ -76,6 +76,6 @@
   },
   "license": "Apache-2.0",
   "publishConfig": {
-    "@my-group-name:registry": " https://you-gitlab-instance-host/api/v4/projects/project-gitlab-id/packages/npm/"
+    "@my-group-name:registry": " https://your-gitlab-instance-host/api/v4/projects/project-gitlab-id/packages/npm/"
   }
 }

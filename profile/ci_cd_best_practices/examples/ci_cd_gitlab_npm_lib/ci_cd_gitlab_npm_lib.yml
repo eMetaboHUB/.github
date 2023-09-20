@@ -12,7 +12,7 @@ variables:
   # other
   DOCKER_IMAGE: "$CI_PROJECT_NAMESPACE/$CI_PROJECT_NAME"
   # DEV
-  BASE_URL_LIB_DEV: "https://you-gitlab-instance-host/my-npm-lib-name/"
+  BASE_URL_LIB_DEV: "https://your-gitlab-instance-host/my-npm-lib-name/"
   PATH_APP_DEV: "/var/www/html/my-npm-lib-name"
   # reports
   FOLDER_REPORT_COVERAGE: "/var/www/html/code_report_$CI_PROJECT_NAMESPACE/$CI_PROJECT_NAME"
