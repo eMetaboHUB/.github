@@ -1,0 +1,315 @@
+### NOTES:
+### - this example use two runner, one called 'docker' and an other one called 'shell'
+### - a '.script' directory contains in-house script (used to remove npm package with same ID from your GitLab registery or by 'package.json' command, like "get git info in json file")
+
+# set default docker image
+image: "$CI_PROJECT_NAMESPACE/$CI_PROJECT_NAME"
+
+## ----------------------------------------------------------------------------
+# gitlab variables
+variables:
+  GIT_SUBMODULE_STRATEGY: recursive
+  # other
+  DOCKER_IMAGE: "$CI_PROJECT_NAMESPACE/$CI_PROJECT_NAME"
+  # DEV
+  BASE_URL_LIB_DEV: "https://you-gitlab-instance-host/my-npm-lib-name/"
+  PATH_APP_DEV: "/var/www/html/my-npm-lib-name"
+  # reports
+  FOLDER_REPORT_COVERAGE: "/var/www/html/code_report_$CI_PROJECT_NAMESPACE/$CI_PROJECT_NAME"
+
+## ----------------------------------------------------------------------------
+# cache
+cache:
+  key: ${CI_COMMIT_REF_SLUG}
+  paths:
+  - node_modules/
+  - src/assets/json/git-version.json
+  - artifacts/
+  - public/assets/
+  - lib/
+  - my-app-*.tgz
+  - coverage/
+
+## ----------------------------------------------------------------------------
+# stages
+stages:
+  - docker_env
+  - pres_build
+  - tests
+  - builds
+  - deploy_and_publish
+  - reports
+
+## ----------------------------------------------------------------------------
+# JOBS - STAGE "docker_env"
+
+# build a docker image that will be used for all "nodejs / npm" based jobs
+docker for vuejs:
+  stage: docker_env
+  tags:
+    - shell
+  except:
+    refs:
+      - master
+      - tags
+  script:
+    - echo "[gitlab-ci] run 'docker build image' ";
+    - docker build -t $DOCKER_IMAGE .
+
+## ----------------------------------------------------------------------------
+## JOBS - STAGE "pres_build"
+
+# fix git folder ownership
+# run 'npm i' if needed
+# check if the projet can pre-compile;
+build - prepare:
+  stage: pres_build
+  needs: ["docker for vuejs"]
+  dependencies: ["docker for vuejs"]
+  tags:
+    - docker
+  before_script:
+    - echo "[gitlab-ci] try to set current directory as safe for git commands use ";
+    - git config --global --add safe.directory ${CI_PROJECT_DIR}
+    - echo "[gitlab-ci] config. registry ";
+    - test -f .npmrc || sh .scripts/init-npmrc-file.sh
+    - echo "[gitlab-ci] init node modules ";
+    - test -d node_modules || npm install
+  script:
+    - echo "[gitlab-ci] vuejs build prepare";
+    - npm run build:prepare
+
+## ----------------------------------------------------------------------------
+## JOBS - STAGE "tests"
+
+# test if linter is OK
+execute linting:
+  stage: tests
+  needs: ["build - prepare"]
+  dependencies: ["build - prepare"]
+  tags:
+    - docker
+  except:
+    refs:
+      - master
+      - tags
+  before_script:
+    - echo "[gitlab-ci] config. registry ";
+    - test -f .npmrc || sh .scripts/init-npmrc-file.sh
+    - echo "[gitlab-ci] init node modules (if needed) ";
+    - test -d node_modules || npm install
+  script:
+    - echo "[gitlab-ci] run lint";
+    - npm run lint
+
+# tests - unit and coverage
+tests - unit:
+  stage: tests
+  needs: ["build - prepare"]
+  dependencies: ["build - prepare"]
+  tags:
+    - docker
+  except:
+    refs:
+      - master
+      - tags
+  before_script:
+    - echo "[gitlab-ci] force clean old report ";
+    - test -d $CI_PROJECT_DIR/coverage && rm -rf $CI_PROJECT_DIR/coverage
+    - echo "[gitlab-ci] config. registry ";
+    - test -f .npmrc || sh .scripts/init-npmrc-file.sh
+    - echo "[gitlab-ci] init node modules (if needed) ";
+    - test -d node_modules || npm install
+  script:
+    - echo "[gitlab-ci] run tests coverage (vitest)";
+    - npm run test:coverage
+  after_script:
+    - echo "[gitlab-ci] run SonarQube analysis";
+    # for this command you must specify CI/CD variables 'SONAR_HOST_URL' and 'SONAR_TOKEN' in your GitLab project / (or parent group).
+    - sonar-scanner -Dsonar.host.url=$SONAR_HOST_URL -Dsonar.login=$SONAR_TOKEN
+  coverage: '/All files\s+\|\s+(\d+\.?\d+)\s+\|/' # this command is used by gitlab to catch the project's code coverage
+  artifacts:
+    name: my-npm-lib-name-$CI_COMMIT_REF_NAME-code_report
+    expire_in: 1 day
+    paths:
+      - coverage
+
+# e2e tests for pages
+tests - e2e, pages:
+  stage: tests
+  needs: ["build - prepare"]
+  dependencies: ["build - prepare"]
+  tags:
+    - docker
+  image: cypress/browsers:node16.16.0-chrome107-ff107-edge
+  except:
+    refs:
+      - master
+      - tags
+  before_script:
+    - npm ci        # install dependencies
+    - npm run dev & # start the server in the background
+    - sleep 5s;     # extra sleep - prevent to run test before the server fuly started.
+  script:
+    - npx cypress run --browser firefox
+
+# e2e tests for components
+tests - e2e, components:
+  stage: tests
+  needs: ["build - prepare"]
+  dependencies: ["build - prepare"]
+  tags:
+    - docker
+  image: cypress/browsers:node16.16.0-chrome107-ff107-edge
+  except:
+    refs:
+      - master
+      - tags
+  before_script:
+    - npm ci # install dependencies
+  script:
+    - npx cypress run --component --browser firefox --port 3001
+
+# build showcase for DEV
+build - dev:
+  stage: builds
+  needs: ["tests - unit"]
+  dependencies: ["tests - unit"]
+  tags:
+    - docker
+  except:
+    refs:
+      - master
+      - tags
+  before_script:
+    - echo "[gitlab-ci] clean generated sources";
+    - test -d $CI_PROJECT_DIR/dist && rm -rf $CI_PROJECT_DIR/dist
+    - echo "[gitlab-ci] try to set current directory as safe for git commands use ";
+    - git config --global --add safe.directory ${CI_PROJECT_DIR}
+  script:
+    - echo "[gitlab-ci] vuejs build app (dev)";
+    - npm run build:dev
+  after_script:
+    - echo "[gitlab-ci] copy to artifacts ";
+    - test -d $CI_PROJECT_DIR/artifacts || mkdir $CI_PROJECT_DIR/artifacts/
+    - cp -r $CI_PROJECT_DIR/dist/* $CI_PROJECT_DIR/artifacts/
+    - echo "[gitlab-ci] clean dist ";
+    - rm -rf dist/
+  artifacts:
+    name: my-npm-lib-name-$CI_COMMIT_REF_NAME
+    expire_in: 1 day
+    paths:
+        - $CI_PROJECT_DIR/artifacts
+
+# build node package
+build - library:
+  stage: builds
+  needs: ["tests - unit"]
+  dependencies: ["tests - unit"]
+  tags:
+    - docker
+  before_script:
+    - echo "[gitlab-ci] clean generated sources";
+    - rm -rf $CI_PROJECT_DIR/dist
+  script:
+    - echo "[gitlab-ci] vuejs build library";
+    - npm run build:lib && npm pack
+  after_script:
+    - echo "[gitlab-ci] copy to lib ";
+    - test -d $CI_PROJECT_DIR/lib || mkdir $CI_PROJECT_DIR/lib/
+    - cp -r $CI_PROJECT_DIR/dist/* $CI_PROJECT_DIR/lib/
+
+## ----------------------------------------------------------------------------
+## JOBS - STAGE "deploy_and_publish"
+
+# deploy showcase on dev. server
+#
+# You must configure the targeted directory to be writable for a linux user (e.g.: create one called 'gitlab-bot')
+# and add/configure a RSA public key to allow SSH commands without login/password authentication
+# (You should consider to allow this user to perform SSH commands only from your GitLab Runner server IP).
+#
+# For this job, you need to set the following CI/CD variables in your GitLab project / (or parent group):
+# - SSH_USER: your linux user on the remote server
+# - SSH_OPTS: SSH command options; e.g.: " -q -t "
+# - SSH_HOST_DEV_SERVER_SERVER: the targeted server DNS or IP
+# - SSH_PRIVATE_KEY: the linux user private RSA key (must be kept secret! hide this variable)
+deploy - dev:
+  stage: deploy_and_publish
+  needs: ["build - dev"]
+  dependencies: ["build - dev"]
+  tags:
+    - docker
+  image: "pfem/ssh-utils"
+  except:
+    refs:
+      - master
+      - tags
+  before_script:
+    - echo "[gitlab-ci] init SSH key";
+    - mkdir -p ~/.ssh
+    - eval $(ssh-agent -s)
+    - '[[ -f /.dockerenv ]] && echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config'
+    - ssh-add <(echo "$SSH_PRIVATE_KEY" | base64 -d)
+  script:
+    - echo "[gitlab-ci] remove old app on $SSH_HOST_DEV_SERVER ";
+    - ssh $SSH_OPTS $SSH_USER@$SSH_HOST_DEV_SERVER "rm -rf $PATH_APP_DEV/* "
+    - echo "[gitlab-ci] update app on $SSH_HOST_DEV_SERVER ";
+    - scp -r $CI_PROJECT_DIR/artifacts/* $SSH_USER@$SSH_HOST_DEV_SERVER:$PATH_APP_DEV/
+
+# publish node package for dev. / snapshot
+publish library - dev:
+  stage: deploy_and_publish
+  needs: ["build - library"]
+  dependencies: ["build - library"]
+  tags:
+    - docker
+  before_script:
+    - echo "[gitlab-ci] restore correct 'dist/'";
+    - test -d $CI_PROJECT_DIR/dist && rm -rf $CI_PROJECT_DIR/dist
+    - mkdir -p $CI_PROJECT_DIR/dist
+    - cp -r $CI_PROJECT_DIR/lib/* $CI_PROJECT_DIR/dist/
+    - echo "[gitlab-ci] config. registry ";
+    - test -f .npmrc || sh .scripts/init-npmrc-file.sh
+    - echo "[gitlab-ci] removing old published package with same identifier";
+    # get packages (you need to add a GitLab CI/CD variable for 'MASTER_TOKEN' with a GitLab API token able to remove package in GitLab registery throught its API)
+    - >
+        curl --request GET --header "PRIVATE-TOKEN: $MASTER_TOKEN" "https://${CI_SERVER_HOST}/api/v4/projects/${CI_PROJECT_ID}/packages" > gitlab_published_packages_list.json
+    # get published package ID for this version
+    - package_id=$(nodejs .scripts/get-package-id.cjs);
+    # remove package with same version
+    - >
+        curl --request DELETE --header "PRIVATE-TOKEN: $MASTER_TOKEN" "https://${CI_SERVER_HOST}/api/v4/projects/${CI_PROJECT_ID}/packages/$package_id"
+    - sleep 3s; # sleep 3 seconds
+  script:
+    - echo "[gitlab-ci] vuejs build app (dev)";
+    - npm publish
+
+## ----------------------------------------------------------------------------
+## JOBS - STAGE "reports"
+
+# jobs - code report / coverage
+publish report - code coverage:
+  stage: reports
+  needs: ["tests - unit"]
+  dependencies: ["tests - unit"]
+  tags:
+    - docker
+  image: "pfem/ssh-utils"
+  except:
+    refs:
+      - master
+      - tags
+  before_script:
+    - mkdir -p ~/.ssh
+    - eval $(ssh-agent -s)
+    - '[[ -f /.dockerenv ]] && echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config'
+    - ssh-add <(echo "$SSH_PRIVATE_KEY" | base64 -d)
+  script:
+    - ls coverage/
+    - echo "[gitlab-ci] remove old code report on test server";
+    - ssh $SSH_OPTS $SSH_USER@$SSH_HOST_DEV_SERVER "rm -rf $FOLDER_REPORT_COVERAGE "
+    - echo "[gitlab-ci] copy code report to test server";
+    - ssh $SSH_OPTS $SSH_USER@$SSH_HOST_DEV_SERVER "test -d $FOLDER_REPORT_COVERAGE || mkdir -p $FOLDER_REPORT_COVERAGE"
+    - scp -r $CI_PROJECT_DIR/coverage/* $SSH_USER@$SSH_HOST_DEV_SERVER:$FOLDER_REPORT_COVERAGE
+
+# [end]
