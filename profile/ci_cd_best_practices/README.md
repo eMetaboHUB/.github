@@ -1,6 +1,6 @@
 # CI/CD best practives and recommendations
 
-![logo mth](../images/logo_mth.jpeg.jpg  "logo mth")
+![logo mth](https://github.com/eMetaboHUB/.github/blob/main/profile/images/logo_mth.jpg  "logo mth")
 
 ## Document objectives and metadata
 
@@ -245,4 +245,4 @@ If your development project uses several git repositories,
 consider running a daily or weekly pipeline to test all CI/CD projects in a specific order to check the consistency of your overall project. 
 Refer to the "trigger pipeline" documentation for more help.
 
-![banner mth](../images/logo_banner.png  "banner mth")
+![banner mth](https://github.com/eMetaboHUB/.github/blob/main/profile/images/logo_banner.png  "banner mth")
