@@ -4,8 +4,7 @@
 
 ## Document objectives and metadata
 
-- authors: <nils.paulhe@inrae.fr>, <christophe.duperier@inrae.fr> and <franck.giacomoni@inrae.fr>
-- leader: <franck.giacomoni@inrae.fr>
+- authors: the MetaboHUB consortium
 - creation date: `2023-03-02`
 - targeted public: MetaboHUB’s code developers (All WPs)
 - scope: MetaboHUB2 – WP5 – T2 - Infrastructure
