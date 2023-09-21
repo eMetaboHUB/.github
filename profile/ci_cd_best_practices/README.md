@@ -225,7 +225,7 @@ test:
     - echo 'test'
 ```
 
-More details here : <https://docs.gitlab.com/ee/ci/yaml/?ref=jsramblings.com#extends>
+More details [on GitLab official documentation website](https://docs.gitlab.com/ee/ci/yaml/?ref=jsramblings.com#extends).
 
 ### Import CI from other projects
 
@@ -241,7 +241,7 @@ include:
 
 This allows to define some common jobs and templates in a unique repository.
 
-More details here: <https://docs.gitlab.com/ee/ci/yaml/includes.html>
+More details [on GitLab official documentation website](https://docs.gitlab.com/ee/ci/yaml/includes.html).
 
 ## CI/CD file recommendations
 
