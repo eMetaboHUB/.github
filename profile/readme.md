@@ -9,6 +9,7 @@ Please find all our public codes, projects and best practices from the MetaboHUB
 
 - [Discovery](https://github.com/eMetaboHUB/Discovery) - eases sparql request
 - [Forum - DiseasesChem](https://github.com/eMetaboHUB/Forum-DiseasesChem) - a Knowledge Graph from public databases and scientific literature to extract associations between chemicals and diseases.
+- [MetExplore/Met4J](https://github.com/MetExplore/met4j/) - an open-source Java library dedicated to the structural analysis of metabolic networks.
 - [Metasaurus](https://github.com/eMetaboHUB/metasaurus) - ontology for metabolomics studies and objects
 - [PeakForest](https://github.com/peakforest) - The MetaboHUB's spectral database
 
