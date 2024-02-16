@@ -12,6 +12,7 @@ Please find all our public codes, projects and best practices from the MetaboHUB
 - [MetExplore/Met4J](https://github.com/MetExplore/met4j/) - an open-source Java library dedicated to the structural analysis of metabolic networks.
 - [Metasaurus](https://github.com/eMetaboHUB/metasaurus) - ontology for metabolomics studies and objects
 - [PeakForest](https://github.com/peakforest) - The MetaboHUB's spectral database
+- [MAMA](https://github.com/eMetaboHUB-MAMA) - The Metabolomics Analysis MAnager project
 
 ## Documentation and best practices
 
